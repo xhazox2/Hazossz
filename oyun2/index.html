@@ -1,1 +1,183 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Hazometry Dash - Hızlı Level</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        
+        #ui-panel {
+            position: absolute; top: 20px; left: 20px; 
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px; border: 2px solid #00ffcc;
+            border-radius: 10px; color: white; min-width: 180px;
+            z-index: 50;
+        }
+        .stat { font-size: 18px; margin: 5px 0; }
+        #level-text { color: #ff0055; font-weight: bold; font-size: 24px; }
+        .hint { color: #00ffcc; font-size: 14px; margin-top: 10px; border-top: 1px solid #333; padding-top: 5px; }
+        
+        #death-screen {
+            display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); text-align: center;
+            background: rgba(20, 0, 0, 0.95); color: #ff0055; padding: 40px;
+            border: 4px solid #ff0055; border-radius: 20px; z-index: 100;
+        }
+    </style>
+</head>
+<body>
 
+    <div id="ui-panel">
+        <div id="level-text">LEVEL 1</div>
+        <div class="stat">Skor: <span id="score">0</span></div>
+        <div class="stat">Hedef: <span id="next-level">10</span></div>
+        <div class="hint">Zıplamak için: <b>SPACE</b></div>
+    </div>
+    
+    <div id="death-screen">
+        <h1>ELENDİN!</h1>
+        <p id="final-stats" style="color: white; font-size: 18px;"></p>
+        <p style="color: #00ffcc;">Yeniden başlamak için <b>"R"</b> tuşuna bas!</p>
+        <button onclick="resetGame()" style="padding: 10px 20px; cursor: pointer; background: #ff0055; color: white; border: none; font-weight: bold; border-radius: 5px;">YENİDEN DENE</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let player, obstacles, score, level, gameSpeed, isGameOver;
+    const groundHeight = 100;
+    let groundY = canvas.height - groundHeight;
+
+    function init() {
+        groundY = canvas.height - groundHeight;
+        player = { x: 100, y: groundY - 40, size: 40, dy: 0, jumpForce: 16, gravity: 0.8, grounded: true, color: "#00ffcc" };
+        obstacles = [];
+        score = 0;
+        level = 1;
+        gameSpeed = 8;
+        isGameOver = false;
+        document.getElementById("death-screen").style.display = "none";
+        updateUI();
+    }
+
+    function updateUI() {
+        document.getElementById("level-text").innerText = "LEVEL " + level;
+        document.getElementById("score").innerText = score;
+        document.getElementById("next-level").innerText = (Math.floor(score / 10) + 1) * 10;
+    }
+
+    function spawnObstacle() {
+        if (isGameOver) return;
+        let w = 35 + Math.random() * 10;
+        let h = 42 + (level * 2.5);
+        obstacles.push({ x: canvas.width, width: w, height: h, color: `hsl(${(level * 50) % 360}, 80%, 50%)`, scored: false });
+        let spawnRate = Math.max(600, 1600 - (level * 110));
+        setTimeout(spawnObstacle, spawnRate);
+    }
+
+    function resetGame() { init(); }
+
+    function update() {
+        if (isGameOver) return;
+
+        player.dy += player.gravity;
+        player.y += player.dy;
+
+        if (player.y + player.size >= groundY) {
+            player.y = groundY - player.size;
+            player.dy = 0;
+            player.grounded = true;
+        } else {
+            player.grounded = false;
+        }
+
+        obstacles.forEach((obs, index) => {
+            obs.x -= gameSpeed;
+
+            if (!obs.scored && obs.x + obs.width < player.x) {
+                score++;
+                obs.scored = true;
+                
+                // HER 10 PUANDA LEVEL ATLA
+                if (score % 10 === 0) {
+                    level++;
+                    gameSpeed += 1.2;
+                    player.color = `hsl(${(level * 60) % 360}, 100%, 50%)`;
+                }
+                updateUI();
+            }
+
+            let tol = 7; 
+            if (player.x + tol < obs.x + obs.width - tol &&
+                player.x + player.size - tol > obs.x + tol &&
+                player.y + player.size - tol > groundY - obs.height) {
+                gameOver();
+            }
+
+            if (obs.x < -100) obstacles.splice(index, 1);
+        });
+    }
+
+    function draw() {
+        ctx.fillStyle = "#111";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#222";
+        ctx.fillRect(0, groundY, canvas.width, groundHeight);
+        ctx.strokeStyle = player.color;
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0, groundY, canvas.width, 1);
+
+        if(!isGameOver) {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.size, player.size);
+            ctx.fillStyle = "white";
+            ctx.fillRect(player.x + 25, player.y + 10, 8, 8);
+        }
+
+        obstacles.forEach(obs => {
+            ctx.fillStyle = obs.color;
+            ctx.beginPath();
+            ctx.moveTo(obs.x, groundY);
+            ctx.lineTo(obs.x + obs.width / 2, groundY - obs.height);
+            ctx.lineTo(obs.x + obs.width, groundY);
+            ctx.fill();
+        });
+    }
+
+    function gameOver() {
+        isGameOver = true;
+        document.getElementById("final-stats").innerText = `Skor: ${score} | Seviye: ${level}`;
+        document.getElementById("death-screen").style.display = "block";
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    window.addEventListener("keydown", (e) => {
+        if ((e.code === "Space" || e.code === "ArrowUp") && player.grounded && !isGameOver) {
+            player.dy = -player.jumpForce;
+            player.grounded = false; 
+        }
+        if (e.code === "KeyR") resetGame();
+    });
+
+    init();
+    spawnObstacle();
+    loop();
+</script>
+</body>
+</html>
